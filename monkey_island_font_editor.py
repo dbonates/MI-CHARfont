@@ -11,7 +11,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QScrollArea, QLabel, QPushButton, QFileDialog, QMessageBox, QGridLayout,
-    QFrame, QSizePolicy
+    QFrame, QSizePolicy, QButtonGroup
 )
 from PyQt6.QtCore import Qt, QSize, QRect, pyqtSignal
 from PyQt6.QtGui import (
@@ -25,6 +25,7 @@ class PixelEditorCanvas(QWidget):
     """Canvas widget for pixel-level editing with zoom and grid."""
     
     pixelChanged = pyqtSignal(int, int, int)  # x, y, color_index
+    characterJumped = pyqtSignal(int)  # character index
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -224,6 +225,11 @@ class PixelEditorCanvas(QWidget):
         self.char_height = height
         self.update()
     
+    def jump_to_character(self, char_index):
+        """Emit signal to scroll to a specific character."""
+        if self.image and 0 <= char_index < (self.image.height() // self.char_height):
+            self.characterJumped.emit(char_index)
+    
     def save_image(self, output_path):
         """Save image with original palette preserved."""
         if not self.image or not self.original_palette:
@@ -309,6 +315,8 @@ class MonkeyIslandFontEditor(QMainWindow):
         self.current_file = None
         self.current_index = None
         self.workspace_dir = None
+        self.color_buttons = []
+        self.color_button_group = None
         
         self.setWindowTitle("Monkey Island Bitmap Font Editor")
         self.setGeometry(100, 100, 1200, 800)
@@ -344,22 +352,23 @@ class MonkeyIslandFontEditor(QMainWindow):
         scroll.setWidget(self.thumbnail_container)
         left_layout.addWidget(scroll)
         
-        # Right panel: Editor
-        right_panel = QWidget()
-        right_layout = QVBoxLayout()
-        right_panel.setLayout(right_layout)
+        # Center panel: Editor canvas
+        center_panel = QWidget()
+        center_layout = QVBoxLayout()
+        center_panel.setLayout(center_layout)
         
         # Info label
         self.info_label = QLabel("Select a character to edit")
         self.info_label.setStyleSheet("font-size: 14px; padding: 10px;")
-        right_layout.addWidget(self.info_label)
+        center_layout.addWidget(self.info_label)
         
         # Canvas scroll area
-        canvas_scroll = QScrollArea()
-        canvas_scroll.setWidgetResizable(False)
+        self.canvas_scroll = QScrollArea()
+        self.canvas_scroll.setWidgetResizable(False)
         self.canvas = PixelEditorCanvas()
-        canvas_scroll.setWidget(self.canvas)
-        right_layout.addWidget(canvas_scroll)
+        self.canvas.characterJumped.connect(self.scroll_to_character)
+        self.canvas_scroll.setWidget(self.canvas)
+        center_layout.addWidget(self.canvas_scroll)
         
         # Controls
         controls_layout = QHBoxLayout()
@@ -375,33 +384,72 @@ class MonkeyIslandFontEditor(QMainWindow):
         
         controls_layout.addStretch()
         
-        # Color picker (palette indices)
-        color_label = QLabel("Color Index:")
-        controls_layout.addWidget(color_label)
-        
-        self.color0_btn = QPushButton("0")
-        self.color0_btn.setFixedSize(40, 30)
-        self.color0_btn.clicked.connect(lambda: self.set_color(0))
-        controls_layout.addWidget(self.color0_btn)
-        
-        self.color1_btn = QPushButton("1")
-        self.color1_btn.setFixedSize(40, 30)
-        self.color1_btn.clicked.connect(lambda: self.set_color(1))
-        controls_layout.addWidget(self.color1_btn)
-        
-        controls_layout.addStretch()
-        
         # Save button
         save_btn = QPushButton("Save")
         save_btn.clicked.connect(self.save_current)
         save_btn.setStyleSheet("font-weight: bold; padding: 5px 20px;")
         controls_layout.addWidget(save_btn)
         
-        right_layout.addLayout(controls_layout)
+        center_layout.addLayout(controls_layout)
+        
+        # Right panel: Color palette and ASCII jump table
+        right_panel = QWidget()
+        right_layout = QVBoxLayout()
+        right_panel.setLayout(right_layout)
+        right_panel.setMaximumWidth(280)
+        
+        # Color picker
+        color_picker_frame = QFrame()
+        color_picker_frame.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Raised)
+        color_picker_layout = QVBoxLayout()
+        color_picker_layout.setContentsMargins(5, 5, 5, 5)
+        
+        color_label = QLabel("Color Palette")
+        color_label.setStyleSheet("font-weight: bold; font-size: 12px;")
+        color_picker_layout.addWidget(color_label)
+        
+        # Color grid container
+        color_container = QWidget()
+        color_container.setFixedSize(256, 256)
+        self.color_layout = QGridLayout()
+        self.color_layout.setSpacing(0)
+        self.color_layout.setContentsMargins(0, 0, 0, 0)
+        color_container.setLayout(self.color_layout)
+        color_picker_layout.addWidget(color_container)
+        
+        color_picker_frame.setLayout(color_picker_layout)
+        right_layout.addWidget(color_picker_frame)
+        
+        # ASCII character jump table
+        ascii_frame = QFrame()
+        ascii_frame.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Raised)
+        ascii_layout = QVBoxLayout()
+        ascii_layout.setContentsMargins(5, 5, 5, 5)
+        
+        ascii_label = QLabel("Jump to Character")
+        ascii_label.setStyleSheet("font-weight: bold; font-size: 12px;")
+        ascii_layout.addWidget(ascii_label)
+        
+        # Scrollable ASCII table
+        ascii_scroll = QScrollArea()
+        ascii_scroll.setWidgetResizable(True)
+        ascii_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        ascii_container = QWidget()
+        self.ascii_layout = QGridLayout()
+        self.ascii_layout.setSpacing(2)
+        self.ascii_layout.setContentsMargins(2, 2, 2, 2)
+        ascii_container.setLayout(self.ascii_layout)
+        ascii_scroll.setWidget(ascii_container)
+        ascii_layout.addWidget(ascii_scroll)
+        
+        ascii_frame.setLayout(ascii_layout)
+        right_layout.addWidget(ascii_frame)
         
         # Add panels to main layout
         main_layout.addWidget(left_panel)
-        main_layout.addWidget(right_panel, stretch=1)
+        main_layout.addWidget(center_panel, stretch=1)
+        main_layout.addWidget(right_panel)
         
     def load_workspace(self):
         """Load all character bitmaps from workspace directory."""
@@ -455,6 +503,7 @@ class MonkeyIslandFontEditor(QMainWindow):
             else:
                 self.info_label.setText(f"Editing: Character #{index} - {Path(filepath).name}")
             self.update_color_buttons()
+            self.populate_ascii_table()
         except Exception as e:
             QMessageBox.critical(
                 self,
@@ -467,13 +516,54 @@ class MonkeyIslandFontEditor(QMainWindow):
         if not self.canvas.image:
             return
         
-        # Get colors from palette
-        for i, btn in enumerate([self.color0_btn, self.color1_btn]):
-            if i < self.canvas.image.colorCount():
-                color = QColor.fromRgb(self.canvas.image.color(i))
-                btn.setStyleSheet(
-                    f"background-color: rgb({color.red()}, {color.green()}, {color.blue()});"
-                )
+        # Clear existing buttons
+        for btn in self.color_buttons:
+            self.color_layout.removeWidget(btn)
+            btn.deleteLater()
+        self.color_buttons.clear()
+        
+        # Create button group for exclusive selection
+        self.color_button_group = QButtonGroup(self)
+        self.color_button_group.setExclusive(True)
+        
+        # Create button for each palette color (16 per row)
+        num_colors = self.canvas.image.colorCount()
+        colors_per_row = 16
+        
+        for i in range(num_colors):
+            color = QColor.fromRgb(self.canvas.image.color(i))
+            
+            btn = QPushButton()
+            btn.setFixedSize(16, 16)
+            btn.setCheckable(True)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: rgb({color.red()}, {color.green()}, {color.blue()});
+                    border: none;
+                    margin: 0px;
+                    padding: 0px;
+                }}
+                QPushButton:checked {{
+                    border: 2px solid #ffffff;
+                }}
+                QPushButton:hover {{
+                    border: 1px solid #ffff00;
+                }}
+            """)
+            btn.setToolTip(f"Index {i}: RGB({color.red()}, {color.green()}, {color.blue()})")
+            btn.clicked.connect(lambda checked, idx=i: self.set_color(idx))
+            
+            row = i // colors_per_row
+            col = i % colors_per_row
+            
+            self.color_button_group.addButton(btn, i)
+            self.color_layout.addWidget(btn, row, col)
+            self.color_buttons.append(btn)
+        
+        # Select first color by default
+        if self.color_buttons:
+            self.color_buttons[1].setChecked(True)
+            self.canvas.set_color(1)
     
     def set_color(self, color_index):
         """Set the current drawing color."""
@@ -483,6 +573,55 @@ class MonkeyIslandFontEditor(QMainWindow):
         """Adjust zoom level."""
         new_zoom = max(5, min(50, self.canvas.zoom_level + delta))
         self.canvas.set_zoom(new_zoom)
+    
+    def populate_ascii_table(self):
+        """Populate the ASCII character jump table."""
+        # Clear existing buttons
+        for i in reversed(range(self.ascii_layout.count())):
+            self.ascii_layout.itemAt(i).widget().setParent(None)
+        
+        if not self.canvas.image:
+            return
+        
+        num_chars = self.canvas.image.height() // self.canvas.char_height
+        chars_per_row = 8
+        
+        for i in range(num_chars):
+            # Determine character representation
+            if 32 <= i < 127:
+                char_repr = chr(i)
+            else:
+                char_repr = f"{i}"
+            
+            btn = QPushButton(char_repr)
+            btn.setFixedSize(28, 28)
+            btn.setToolTip(f"Jump to ASCII {i}: '{chr(i) if 0 <= i < 256 else '?'}'")
+            btn.setStyleSheet("""
+                QPushButton {
+                    font-size: 10px;
+                    font-family: monospace;
+                }
+                QPushButton:hover {
+                    background-color: #ffff99;
+                }
+            """)
+            btn.clicked.connect(lambda checked, idx=i: self.jump_to_character(idx))
+            
+            row = i // chars_per_row
+            col = i % chars_per_row
+            self.ascii_layout.addWidget(btn, row, col)
+    
+    def jump_to_character(self, char_index):
+        """Scroll canvas to show specific character."""
+        if not self.canvas.image:
+            return
+        
+        y_pos = char_index * self.canvas.char_height * self.canvas.zoom_level
+        self.canvas_scroll.verticalScrollBar().setValue(y_pos)
+    
+    def scroll_to_character(self, char_index):
+        """Handle character jump signal from canvas."""
+        self.jump_to_character(char_index)
     
     def save_current(self):
         """Save the currently edited character."""
