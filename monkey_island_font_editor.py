@@ -39,6 +39,16 @@ class PixelEditorCanvas(QWidget):
         self.show_char_indices = True
         self.hover_y = -1
         
+        # Selection and clipboard
+        self.selecting = False
+        self.selection_start = None
+        self.selection_end = None
+        self.clipboard_data = None  # Stores copied pixel data
+        self.clipboard_size = None  # (width, height)
+        self.paste_mode = False
+        self.paste_position = None  # Current paste preview position
+        self.paste_dragging = False
+        
         self.setMinimumSize(200, 200)
         self.setMouseTracking(True)
         
@@ -172,15 +182,76 @@ class PixelEditorCanvas(QWidget):
                 # Text
                 painter.setPen(QColor(255, 255, 255) if not is_hovered else QColor(0, 0, 0))
                 painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label_text)
+        
+        # Draw selection rectangle
+        if self.selection_start and self.selection_end:
+            x1 = min(self.selection_start[0], self.selection_end[0]) * self.zoom_level
+            y1 = min(self.selection_start[1], self.selection_end[1]) * self.zoom_level
+            x2 = max(self.selection_start[0], self.selection_end[0]) * self.zoom_level + self.zoom_level
+            y2 = max(self.selection_start[1], self.selection_end[1]) * self.zoom_level + self.zoom_level
+            
+            painter.setPen(QPen(QColor(255, 255, 0), 2, Qt.PenStyle.DashLine))
+            painter.drawRect(x1, y1, x2 - x1, y2 - y1)
+        
+        # Draw paste preview
+        if self.paste_mode and self.paste_position and self.clipboard_data and self.clipboard_size:
+            px, py = self.paste_position
+            cw, ch = self.clipboard_size
+            
+            # Draw semi-transparent preview
+            painter.setOpacity(0.7)
+            for dy in range(ch):
+                for dx in range(cw):
+                    if dy * cw + dx < len(self.clipboard_data):
+                        color_idx = self.clipboard_data[dy * cw + dx]
+                        color = QColor.fromRgb(self.image.color(color_idx))
+                        
+                        rect = QRect(
+                            (px + dx) * self.zoom_level,
+                            (py + dy) * self.zoom_level,
+                            self.zoom_level,
+                            self.zoom_level
+                        )
+                        painter.fillRect(rect, color)
+            
+            painter.setOpacity(1.0)
+            # Draw border around paste preview
+            painter.setPen(QPen(QColor(0, 255, 0), 2, Qt.PenStyle.SolidLine))
+            painter.drawRect(
+                px * self.zoom_level,
+                py * self.zoom_level,
+                cw * self.zoom_level,
+                ch * self.zoom_level
+            )
     
     def mousePressEvent(self, event: QMouseEvent):
-        """Start drawing."""
-        if event.button() == Qt.MouseButton.LeftButton and self.image:
-            self.drawing = True
-            self.draw_pixel(event.pos())
+        """Start drawing, selecting, or paste dragging."""
+        if not self.image:
+            return
+        
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self.paste_mode:
+                # Start dragging paste preview or commit paste
+                x = event.pos().x() // self.zoom_level
+                y = event.pos().y() // self.zoom_level
+                self.paste_position = (x, y)
+                self.paste_dragging = True
+                self.update()
+            elif event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                # Start selection
+                x = event.pos().x() // self.zoom_level
+                y = event.pos().y() // self.zoom_level
+                self.selecting = True
+                self.selection_start = (x, y)
+                self.selection_end = (x, y)
+                self.update()
+            else:
+                # Normal drawing
+                self.drawing = True
+                self.draw_pixel(event.pos())
     
     def mouseMoveEvent(self, event: QMouseEvent):
-        """Continue drawing and track hover for character highlighting."""
+        """Continue drawing, selecting, or dragging paste preview."""
         if self.image:
             # Update hover position
             old_hover = self.hover_y
@@ -188,14 +259,27 @@ class PixelEditorCanvas(QWidget):
             if old_hover != self.hover_y:
                 self.update()
             
+            x = event.pos().x() // self.zoom_level
+            y = event.pos().y() // self.zoom_level
+            
+            # Update selection
+            if self.selecting:
+                self.selection_end = (x, y)
+                self.update()
+            # Drag paste preview
+            elif self.paste_dragging:
+                self.paste_position = (x, y)
+                self.update()
             # Draw if mouse is pressed
-            if self.drawing:
+            elif self.drawing:
                 self.draw_pixel(event.pos())
     
     def mouseReleaseEvent(self, event: QMouseEvent):
-        """Stop drawing."""
+        """Stop drawing, selecting, or paste dragging."""
         if event.button() == Qt.MouseButton.LeftButton:
             self.drawing = False
+            self.selecting = False
+            self.paste_dragging = False
     
     def draw_pixel(self, pos):
         """Draw a pixel at the given position."""
@@ -229,6 +313,78 @@ class PixelEditorCanvas(QWidget):
         """Emit signal to scroll to a specific character."""
         if self.image and 0 <= char_index < (self.image.height() // self.char_height):
             self.characterJumped.emit(char_index)
+    
+    def copy_selection(self):
+        """Copy selected region to clipboard."""
+        if not self.image or not self.selection_start or not self.selection_end:
+            return False
+        
+        x1 = min(self.selection_start[0], self.selection_end[0])
+        y1 = min(self.selection_start[1], self.selection_end[1])
+        x2 = max(self.selection_start[0], self.selection_end[0])
+        y2 = max(self.selection_start[1], self.selection_end[1])
+        
+        width = x2 - x1 + 1
+        height = y2 - y1 + 1
+        
+        # Copy pixel data
+        self.clipboard_data = []
+        for y in range(y1, y2 + 1):
+            for x in range(x1, x2 + 1):
+                if 0 <= x < self.image.width() and 0 <= y < self.image.height():
+                    self.clipboard_data.append(self.image.pixelIndex(x, y))
+                else:
+                    self.clipboard_data.append(0)
+        
+        self.clipboard_size = (width, height)
+        return True
+    
+    def start_paste_mode(self):
+        """Enter paste mode with moveable preview."""
+        if not self.clipboard_data or not self.clipboard_size:
+            return False
+        
+        self.paste_mode = True
+        # Start paste at top-left of visible area (or 0,0)
+        self.paste_position = (0, 0)
+        self.update()
+        return True
+    
+    def commit_paste(self):
+        """Paste clipboard data at current position."""
+        if not self.paste_mode or not self.clipboard_data or not self.paste_position:
+            return False
+        
+        px, py = self.paste_position
+        cw, ch = self.clipboard_size
+        
+        # Paste pixels
+        for dy in range(ch):
+            for dx in range(cw):
+                target_x = px + dx
+                target_y = py + dy
+                if (0 <= target_x < self.image.width() and 
+                    0 <= target_y < self.image.height() and
+                    dy * cw + dx < len(self.clipboard_data)):
+                    color_idx = self.clipboard_data[dy * cw + dx]
+                    self.image.setPixel(target_x, target_y, color_idx)
+        
+        self.paste_mode = False
+        self.paste_position = None
+        self.update()
+        return True
+    
+    def cancel_paste(self):
+        """Cancel paste mode."""
+        self.paste_mode = False
+        self.paste_position = None
+        self.update()
+    
+    def clear_selection(self):
+        """Clear current selection."""
+        self.selection_start = None
+        self.selection_end = None
+        self.update()
     
     def save_image(self, output_path):
         """Save image with original palette preserved."""
@@ -361,6 +517,35 @@ class MonkeyIslandFontEditor(QMainWindow):
         zoom_in_btn = QPushButton("Zoom +")
         zoom_in_btn.clicked.connect(lambda: self.adjust_zoom(5))
         controls_layout.addWidget(zoom_in_btn)
+        
+        controls_layout.addStretch()
+        
+        # Copy/Paste buttons
+        copy_btn = QPushButton("Copy")
+        copy_btn.setToolTip("Hold Shift and drag to select, then click Copy")
+        copy_btn.clicked.connect(self.copy_selection)
+        copy_btn.setStyleSheet("padding: 5px 15px;")
+        controls_layout.addWidget(copy_btn)
+        
+        paste_btn = QPushButton("Paste")
+        paste_btn.setToolTip("Paste and drag to position, then click Commit")
+        paste_btn.clicked.connect(self.paste_selection)
+        paste_btn.setStyleSheet("padding: 5px 15px;")
+        controls_layout.addWidget(paste_btn)
+        
+        self.commit_btn = QPushButton("Commit")
+        self.commit_btn.setToolTip("Commit paste at current position")
+        self.commit_btn.clicked.connect(self.commit_paste)
+        self.commit_btn.setStyleSheet("padding: 5px 15px;")
+        self.commit_btn.setEnabled(False)
+        controls_layout.addWidget(self.commit_btn)
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setToolTip("Cancel paste operation")
+        self.cancel_btn.clicked.connect(self.cancel_paste)
+        self.cancel_btn.setStyleSheet("padding: 5px 15px;")
+        self.cancel_btn.setEnabled(False)
+        controls_layout.addWidget(self.cancel_btn)
         
         controls_layout.addStretch()
         
@@ -636,9 +821,6 @@ class MonkeyIslandFontEditor(QMainWindow):
                     font-size: 10px;
                     font-family: Fira Code;
                 }
-                QPushButton:hover {
-                    background-color: #ffff99;
-                }
             """)
             btn.clicked.connect(lambda checked, idx=i: self.jump_to_character(idx))
             
@@ -657,6 +839,67 @@ class MonkeyIslandFontEditor(QMainWindow):
     def scroll_to_character(self, char_index):
         """Handle character jump signal from canvas."""
         self.jump_to_character(char_index)
+    
+    def copy_selection(self):
+        """Copy selected region."""
+        if self.canvas.copy_selection():
+            QMessageBox.information(
+                self,
+                "Copied",
+                f"Selection copied to clipboard ({self.canvas.clipboard_size[0]}x{self.canvas.clipboard_size[1]} pixels)"
+            )
+            self.canvas.clear_selection()
+        else:
+            QMessageBox.warning(
+                self,
+                "No Selection",
+                "Please hold Shift and drag to select a region first."
+            )
+    
+    def paste_selection(self):
+        """Enter paste mode."""
+        if self.canvas.start_paste_mode():
+            self.commit_btn.setEnabled(True)
+            self.cancel_btn.setEnabled(True)
+            self.info_label.setText(
+                f"{self.info_label.text()} | PASTE MODE: Drag to position, then click Commit or Cancel"
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "No Clipboard",
+                "Please copy a selection first."
+            )
+    
+    def commit_paste(self):
+        """Commit the paste operation."""
+        if self.canvas.commit_paste():
+            self.commit_btn.setEnabled(False)
+            self.cancel_btn.setEnabled(False)
+            # Restore info label
+            if self.canvas.image:
+                num_chars = self.canvas.image.height() // self.canvas.char_height
+                self.info_label.setText(
+                    f"Editing: {Path(self.current_file).name} | "
+                    f"Char Height: {self.canvas.char_height}px | "
+                    f"Contains {num_chars} characters (ASCII 0-{num_chars-1}) | "
+                    f"Hover over canvas to see character indices"
+                )
+    
+    def cancel_paste(self):
+        """Cancel the paste operation."""
+        self.canvas.cancel_paste()
+        self.commit_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(False)
+        # Restore info label
+        if self.canvas.image:
+            num_chars = self.canvas.image.height() // self.canvas.char_height
+            self.info_label.setText(
+                f"Editing: {Path(self.current_file).name} | "
+                f"Char Height: {self.canvas.char_height}px | "
+                f"Contains {num_chars} characters (ASCII 0-{num_chars-1}) | "
+                f"Hover over canvas to see character indices"
+            )
     
     def save_current(self):
         """Save the currently edited character."""
