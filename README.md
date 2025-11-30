@@ -2,56 +2,144 @@
 
 A specialized pixel editor for editing The Secret of Monkey Island bitmap font files. Built with PyQt6 to preserve the original color palette without modification.
 
+![Monkey Island Font Editor](screenshot.png)
+
 ## Features
 
-- **Character Grid View**: Displays all character bitmaps with index numbers (starting from 1)
-- **Pixel-Level Editing**: Zoom in and edit individual pixels with a grid overlay
-- **Palette Preservation**: Maintains the original 2-tone pink color palette from the game
-- **Easy Navigation**: Click any character thumbnail to load it for editing
-- **Save Functionality**: Overwrites the original BMP files while preserving the palette
+### Core Editing
+- **Pixel-Level Editing**: Zoom in (5-50x) and edit individual pixels with a grid overlay
+- **Palette Preservation**: Maintains the original 256-color indexed palette from the game files
+- **Character Index Ruler**: Left-side ruler displaying ASCII codes and Windows-1252 character representations
+- **Auto-Height Detection**: Automatically detects character heights (8, 9, 14, or 15 pixels)
+
+### Edit Modes
+- **Draw Mode (✏️)**: Click and drag to paint pixels
+- **Select Mode (⬚)**: Drag to select regions, or hold Shift in draw mode
+
+### Advanced Features
+- **Copy/Paste**: Copy selected regions and paste with moveable preview positioning
+- **Undo/Redo**: 50-level history stack with keyboard shortcuts (Ctrl+Z / Ctrl+Y)
+- **ASCII Jump Table**: Quick navigation to any character (0-255)
+- **Hover Highlighting**: Ruler highlights the character under cursor
+- **Multiple Bitmap Files**: Switch between different font sets (Dialog, Screen Text, Title Screen, etc.)
+
+### Color Palette
+- **Full 256-Color Grid**: 16×16 color palette display
+- **Color Selection**: Click any color to set as drawing color
+- **RGB Tooltips**: Hover over colors to see RGB values
 
 ## Installation
 
-1. Ensure Python 3.x is installed
-2. Install dependencies:
+### Requirements
+- Python 3.8 or higher
+- PyQt6
+- Pillow (PIL)
+
+### Setup
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/monkey-island-font-editor.git
+cd monkey-island-font-editor
+```
+
+2. Create a virtual environment:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On macOS/Linux
+# or
+.venv\Scripts\activate  # On Windows
+```
+
+3. Install dependencies:
 ```bash
 pip install PyQt6 Pillow
 ```
 
-Or use the virtual environment already configured in this directory:
-```bash
-source .venv/bin/activate
-```
-
 ## Usage
 
-Run the editor from the terminal:
+### Running the Editor
+
+With virtual environment activated:
 ```bash
 python monkey_island_font_editor.py
 ```
 
-Or with the virtual environment:
+Or directly:
 ```bash
-.venv/bin/python monkey_island_font_editor.py
+.venv/bin/python monkey_island_font_editor.py  # macOS/Linux
+.venv\Scripts\python monkey_island_font_editor.py  # Windows
 ```
 
-## How to Edit
+### Editing Workflow
 
-1. **Select a Character**: Click on any character thumbnail on the left panel
-2. **Adjust Zoom**: Use "Zoom +" and "Zoom -" buttons to change the pixel size
-3. **Choose Color**: Click color index buttons (0 or 1) to select the drawing color
-4. **Draw Pixels**: Click and drag on the canvas to paint pixels
-5. **Save**: Click "Save" button to write changes to the bitmap file
+1. **Select Bitmap File**: Choose from the preset buttons (Sentence Line, On Screen Text, etc.)
+2. **Navigate Characters**: 
+   - Click buttons in the ASCII jump table
+   - Hover over the canvas to see character boundaries
+   - Characters are labeled with ASCII codes and symbols
+3. **Choose Edit Mode**:
+   - **Draw Mode**: Paint pixels directly
+   - **Select Mode**: Select regions for copying
+4. **Select Color**: Click a color in the palette (shows RGB values on hover)
+5. **Edit Pixels**: Click and drag to draw
+6. **Advanced Operations**:
+   - **Copy**: Select region (Shift+drag or use Select mode), click Copy
+   - **Paste**: Click Paste, drag preview to position, click Commit
+   - **Undo/Redo**: Use buttons or Ctrl+Z / Ctrl+Y
+7. **Save**: Click Save or press Ctrl+S
+
+### Keyboard Shortcuts
+
+- `Ctrl+Z` - Undo
+- `Ctrl+Y` or `Ctrl+Shift+Z` - Redo
+- `Ctrl+C` - Copy selection
+- `Ctrl+V` - Paste
+- `Ctrl+S` - Save
+- `Shift+Drag` - Select region (in Draw mode)
 
 ## Technical Details
 
-- Reads 8-bit indexed BMP files
-- Preserves original palette data structure
-- Each character is displayed with its sequential index number
-- Files are named as `char####.bmp` (e.g., char0001.bmp, char0002.bmp)
+### File Format
+- Reads 8-bit indexed BMP files with 256-color palettes
+- Preserves original palette data byte-for-byte
+- Supports variable character heights (8, 9, 14, 15 pixels)
+- Each bitmap contains 256 characters (extended ASCII)
+
+### Character Encoding
+- Windows-1252 encoding for extended ASCII characters (128-255)
+- Standard ASCII for printable characters (32-126)
+- Character indices displayed on left ruler with hover highlighting
+
+### Bitmap Files
+The editor recognizes these preset bitmap files:
+- `char0001.bmp` - Sentence Line and Dialog (8px height)
+- `char0002.bmp` - On Screen Text (8px height)
+- `char0003.bmp` - Upside Down Text (9px height)
+- `char0004.bmp` - Title Screen/Credits Text (14px height)
+- `char0006.bmp` - VERB UI (8px height)
+
+### Architecture
+- **PixelEditorCanvas**: Main canvas widget with zoom, grid, selection, and undo/redo
+- **MonkeyIslandFontEditor**: Main window with UI controls and file management
+- **Signal/Slot Pattern**: Reactive UI updates via Qt signals (historyChanged, selectionChanged, characterJumped)
 
 ## Notes
 
-- The editor automatically detects all `char*.bmp` files in the current directory
-- Original files are overwritten when saving - make backups if needed
-- The color palette is preserved byte-for-byte from the original game files
+- **Backups**: Original files are overwritten when saving - keep backups!
+- **Undo History**: Limited to 50 levels to manage memory usage
+- **Palette**: Color palette is read from the bitmap file and preserved exactly
+- **Character Width**: All characters are 10 pixels wide
+- **Platform**: Cross-platform (macOS, Linux, Windows)
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
+
+## License
+
+This project is open source. Please check the [LICENSE](LICENSE) file for details.
+
+## Credits
+
+Created for editing bitmap fonts from The Secret of Monkey Island by LucasArts.
