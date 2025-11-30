@@ -26,6 +26,7 @@ class PixelEditorCanvas(QWidget):
     
     pixelChanged = pyqtSignal(int, int, int)  # x, y, color_index
     characterJumped = pyqtSignal(int)  # character index
+    historyChanged = pyqtSignal()  # Emitted when undo/redo state changes
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -48,6 +49,11 @@ class PixelEditorCanvas(QWidget):
         self.paste_mode = False
         self.paste_position = None  # Current paste preview position
         self.paste_dragging = False
+        
+        # Undo/Redo history
+        self.undo_stack = []  # List of (pixel_data, description)
+        self.redo_stack = []  # List of (pixel_data, description)
+        self.max_history = 50  # Maximum undo levels
         
         self.setMinimumSize(200, 200)
         self.setMouseTracking(True)
@@ -104,6 +110,11 @@ class PixelEditorCanvas(QWidget):
         
         self.update_size()
         self.update()
+        
+        # Clear undo/redo history for new image
+        self.undo_stack.clear()
+        self.redo_stack.clear()
+        self.historyChanged.emit()
         
     def update_size(self):
         """Update widget size based on image and zoom."""
@@ -246,7 +257,8 @@ class PixelEditorCanvas(QWidget):
                 self.selection_end = (x, y)
                 self.update()
             else:
-                # Normal drawing
+                # Normal drawing - save state for undo
+                self.save_state("Draw")
                 self.drawing = True
                 self.draw_pixel(event.pos())
     
@@ -277,9 +289,13 @@ class PixelEditorCanvas(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent):
         """Stop drawing, selecting, or paste dragging."""
         if event.button() == Qt.MouseButton.LeftButton:
+            was_drawing = self.drawing
             self.drawing = False
             self.selecting = False
             self.paste_dragging = False
+            # Emit signal to update UI if we were drawing
+            if was_drawing:
+                self.update()
     
     def draw_pixel(self, pos):
         """Draw a pixel at the given position."""
@@ -355,6 +371,9 @@ class PixelEditorCanvas(QWidget):
         if not self.paste_mode or not self.clipboard_data or not self.paste_position:
             return False
         
+        # Save state for undo
+        self.save_state("Paste")
+        
         px, py = self.paste_position
         cw, ch = self.clipboard_size
         
@@ -385,6 +404,99 @@ class PixelEditorCanvas(QWidget):
         self.selection_start = None
         self.selection_end = None
         self.update()
+    
+    def save_state(self, description="Action"):
+        """Save current image state to undo stack."""
+        if not self.image:
+            return
+        
+        # Capture current pixel data
+        width = self.image.width()
+        height = self.image.height()
+        pixel_data = []
+        for y in range(height):
+            for x in range(width):
+                pixel_data.append(self.image.pixelIndex(x, y))
+        
+        # Add to undo stack
+        self.undo_stack.append((pixel_data, description, width, height))
+        
+        # Limit stack size
+        if len(self.undo_stack) > self.max_history:
+            self.undo_stack.pop(0)
+        
+        # Clear redo stack when new action is performed
+        self.redo_stack.clear()
+        
+        # Notify that history changed
+        self.historyChanged.emit()
+        
+        # Notify that history changed
+        self.historyChanged.emit()
+    
+    def undo(self):
+        """Undo last action."""
+        if not self.image or not self.undo_stack:
+            return False
+        
+        # Save current state to redo stack
+        width = self.image.width()
+        height = self.image.height()
+        pixel_data = []
+        for y in range(height):
+            for x in range(width):
+                pixel_data.append(self.image.pixelIndex(x, y))
+        self.redo_stack.append((pixel_data, "Current", width, height))
+        
+        # Restore previous state
+        pixel_data, description, w, h = self.undo_stack.pop()
+        if w == width and h == height:
+            idx = 0
+            for y in range(height):
+                for x in range(width):
+                    if idx < len(pixel_data):
+                        self.image.setPixel(x, y, pixel_data[idx])
+                    idx += 1
+            self.update()
+            self.historyChanged.emit()
+            return True
+        return False
+    
+    def redo(self):
+        """Redo last undone action."""
+        if not self.image or not self.redo_stack:
+            return False
+        
+        # Save current state to undo stack
+        width = self.image.width()
+        height = self.image.height()
+        pixel_data = []
+        for y in range(height):
+            for x in range(width):
+                pixel_data.append(self.image.pixelIndex(x, y))
+        self.undo_stack.append((pixel_data, "Current", width, height))
+        
+        # Restore next state
+        pixel_data, description, w, h = self.redo_stack.pop()
+        if w == width and h == height:
+            idx = 0
+            for y in range(height):
+                for x in range(width):
+                    if idx < len(pixel_data):
+                        self.image.setPixel(x, y, pixel_data[idx])
+                    idx += 1
+            self.update()
+            self.historyChanged.emit()
+            return True
+        return False
+    
+    def can_undo(self):
+        """Check if undo is available."""
+        return len(self.undo_stack) > 0
+    
+    def can_redo(self):
+        """Check if redo is available."""
+        return len(self.redo_stack) > 0
     
     def save_image(self, output_path):
         """Save image with original palette preserved."""
@@ -478,7 +590,35 @@ class MonkeyIslandFontEditor(QMainWindow):
         self.setGeometry(100, 100, 1200, 800)
         
         self.setup_ui()
+        self.setup_shortcuts()
         self.load_workspace()
+    
+    def setup_shortcuts(self):
+        """Setup keyboard shortcuts."""
+        from PyQt6.QtGui import QShortcut, QKeySequence
+        
+        # Undo: Ctrl+Z
+        undo_shortcut = QShortcut(QKeySequence.StandardKey.Undo, self)
+        undo_shortcut.activated.connect(self.undo_action)
+        
+        # Redo: Ctrl+Y or Ctrl+Shift+Z
+        redo_shortcut1 = QShortcut(QKeySequence.StandardKey.Redo, self)
+        redo_shortcut1.activated.connect(self.redo_action)
+        
+        redo_shortcut2 = QShortcut(QKeySequence("Ctrl+Y"), self)
+        redo_shortcut2.activated.connect(self.redo_action)
+        
+        # Copy: Ctrl+C
+        copy_shortcut = QShortcut(QKeySequence.StandardKey.Copy, self)
+        copy_shortcut.activated.connect(self.copy_selection)
+        
+        # Paste: Ctrl+V
+        paste_shortcut = QShortcut(QKeySequence.StandardKey.Paste, self)
+        paste_shortcut.activated.connect(self.paste_selection)
+        
+        # Save: Ctrl+S
+        save_shortcut = QShortcut(QKeySequence.StandardKey.Save, self)
+        save_shortcut.activated.connect(self.save_current)
         
     def setup_ui(self):
         """Setup the user interface."""
@@ -503,6 +643,7 @@ class MonkeyIslandFontEditor(QMainWindow):
         self.canvas_scroll.setWidgetResizable(False)
         self.canvas = PixelEditorCanvas()
         self.canvas.characterJumped.connect(self.scroll_to_character)
+        self.canvas.historyChanged.connect(self.update_undo_redo_buttons)
         self.canvas_scroll.setWidget(self.canvas)
         center_layout.addWidget(self.canvas_scroll)
         
@@ -517,6 +658,23 @@ class MonkeyIslandFontEditor(QMainWindow):
         zoom_in_btn = QPushButton("Zoom +")
         zoom_in_btn.clicked.connect(lambda: self.adjust_zoom(5))
         controls_layout.addWidget(zoom_in_btn)
+        
+        controls_layout.addStretch()
+        
+        # Undo/Redo buttons
+        self.undo_btn = QPushButton("⟲ Undo")
+        self.undo_btn.setToolTip("Undo last action (Ctrl+Z)")
+        self.undo_btn.clicked.connect(self.undo_action)
+        self.undo_btn.setStyleSheet("padding: 5px 15px; font-weight: bold;")
+        self.undo_btn.setEnabled(False)
+        controls_layout.addWidget(self.undo_btn)
+        
+        self.redo_btn = QPushButton("⟳ Redo")
+        self.redo_btn.setToolTip("Redo last undone action (Ctrl+Y)")
+        self.redo_btn.clicked.connect(self.redo_action)
+        self.redo_btn.setStyleSheet("padding: 5px 15px; font-weight: bold;")
+        self.redo_btn.setEnabled(False)
+        controls_layout.addWidget(self.redo_btn)
         
         controls_layout.addStretch()
         
@@ -724,6 +882,7 @@ class MonkeyIslandFontEditor(QMainWindow):
                 self.info_label.setText(f"Editing: Character #{index} - {Path(filepath).name}")
             self.update_color_buttons()
             self.populate_ascii_table()
+            self.update_undo_redo_buttons()
         except Exception as e:
             QMessageBox.critical(
                 self,
@@ -876,6 +1035,7 @@ class MonkeyIslandFontEditor(QMainWindow):
         if self.canvas.commit_paste():
             self.commit_btn.setEnabled(False)
             self.cancel_btn.setEnabled(False)
+            self.update_undo_redo_buttons()
             # Restore info label
             if self.canvas.image:
                 num_chars = self.canvas.image.height() // self.canvas.char_height
@@ -900,6 +1060,27 @@ class MonkeyIslandFontEditor(QMainWindow):
                 f"Contains {num_chars} characters (ASCII 0-{num_chars-1}) | "
                 f"Hover over canvas to see character indices"
             )
+    
+    def undo_action(self):
+        """Undo the last action."""
+        if self.canvas.undo():
+            self.update_undo_redo_buttons()
+        else:
+            if self.canvas.can_undo():
+                QMessageBox.information(self, "Undo", "Cannot undo: state mismatch")
+    
+    def redo_action(self):
+        """Redo the last undone action."""
+        if self.canvas.redo():
+            self.update_undo_redo_buttons()
+        else:
+            if self.canvas.can_redo():
+                QMessageBox.information(self, "Redo", "Cannot redo: state mismatch")
+    
+    def update_undo_redo_buttons(self):
+        """Update undo/redo button states."""
+        self.undo_btn.setEnabled(self.canvas.can_undo())
+        self.redo_btn.setEnabled(self.canvas.can_redo())
     
     def save_current(self):
         """Save the currently edited character."""
