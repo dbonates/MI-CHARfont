@@ -4,29 +4,7 @@
 
 A specialized pixel editor for editing The Secret of Monkey Island bitmap font files. Built with PyQt6 to preserve the original color palette without modification.
 
-I did it one afternoon in my spare time to make ease my life on translating The Secrect of Monkey Island to brasilian portuguese. The original game does not have some special lating characters so I used these tools to get the editable bitmap:
-
-[scummrp and scummfont](https://github.com/dwatteau/scummtr)
-
-## The flow (you don't need to do it as these bitmap are already on this repo, but to repack modified versions into the game you will need them. Also, I put them on system PATH to make things easier.
-
-** Be sure to run these tools on same directory of `MONKEY.OOO` AND `MONKEY.001` files.
-
-1. unpack the game files
-
-```bash
-scummrp -g monkeycd  -p . -d dump_MI -o
-```
-
-2. extract the font bitmaps
-
-```bash
-scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0001 char0001.bmp 
-scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0002 char0002.bmp 
-scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0003 char0003.bmp 
-scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0004 char0004.bmp 
-scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0006 char0006.bmp
-```
+I coded it with AI help in one afternoon in my spare time to make ease my life on translating The Secrect of Monkey Island to brasilian portuguese. The original game does not have some special lating characters.
 
 ## Features
 
@@ -155,6 +133,34 @@ The editor recognizes these preset bitmap files:
 - **Palette**: Color palette is read from the bitmap file and preserved exactly
 - **Character Width**: All characters are 10 pixels wide
 - **Platform**: Cross-platform (macOS, Linux, Windows)
+
+
+## How I got the bitmaps for editign?
+
+I used these tools to get the editable bitmap:
+
+[scummrp and scummfont](https://github.com/dwatteau/scummtr)
+
+## The flow (you don't need to do it as these bitmap are already on this repo, but to repack modified versions into the game you will need them. Also, I put them on system PATH to make things easier.
+
+** Be sure to run these tools on same directory of `MONKEY.OOO` AND `MONKEY.001` files.
+
+1. unpack the game files
+
+```bash
+scummrp -g monkeycd  -p . -d dump_MI -o
+```
+
+2. extract the font bitmaps
+
+```bash
+scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0001 char0001.bmp 
+scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0002 char0002.bmp 
+scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0003 char0003.bmp 
+scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0004 char0004.bmp 
+scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0006 char0006.bmp
+```
+
 
 ## Contributing
 
