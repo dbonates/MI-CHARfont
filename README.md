@@ -57,7 +57,7 @@ source .venv/bin/activate  # On macOS/Linux
 
 3. Install dependencies:
 ```bash
-pip install PyQt6 Pillow
+pip install -r requirements.txt
 ```
 
 ## Usage
