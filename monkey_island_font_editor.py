@@ -186,8 +186,19 @@ class PixelEditorCanvas(QWidget):
                 
                 # Draw character index label on ruler
                 ascii_val = char_idx
-                char_repr = chr(ascii_val) if 32 <= ascii_val < 127 else ''
-                label_text = f"ASCII: {char_idx}\n{char_repr}"
+                # Standard ASCII printable characters
+                if 32 <= ascii_val < 127:
+                    char_repr = chr(ascii_val)
+                # Windows-1252 extended characters (128-255)
+                elif 128 <= ascii_val <= 255:
+                    try:
+                        char_repr = bytes([ascii_val]).decode('windows-1252')
+                    except:
+                        char_repr = ''
+                else:
+                    char_repr = ''
+                
+                label_text = f"ASCII: {char_idx}\n{char_repr}" if char_repr else f"ASCII: {char_idx}"
                 
                 # Background for text
                 painter.setPen(Qt.PenStyle.NoPen)
@@ -198,10 +209,27 @@ class PixelEditorCanvas(QWidget):
                 text_rect = QRect(2, y_start + 2, self.ruler_width - 4, y_end - y_start - 4)
                 painter.drawRect(text_rect)
                 
-                # Text
+                # Text with monospace font
                 painter.setPen(QColor(255, 255, 255) if not is_hovered else QColor(0, 0, 0))
-                painter.setFont(painter.font())
-                painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, label_text)
+                from PyQt6.QtGui import QFont
+                
+                # Draw ASCII label (smaller font)
+                ascii_label = f"ASCII: {char_idx}"
+                small_font = QFont("Courier New", 11)
+                small_font.setStyleHint(QFont.StyleHint.Monospace)
+                painter.setFont(small_font)
+                
+                # Calculate positions for two-line layout
+                label_rect = QRect(2, y_start + 6, self.ruler_width - 4, 12)
+                painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, ascii_label)
+                
+                # Draw character representation (larger font)
+                if char_repr:
+                    large_font = QFont("Courier New", 22)
+                    large_font.setStyleHint(QFont.StyleHint.Monospace)
+                    painter.setFont(large_font)
+                    char_rect = QRect(2, y_start + 14, self.ruler_width - 4, y_end - y_start - 16)
+                    painter.drawText(char_rect, Qt.AlignmentFlag.AlignCenter, char_repr)
         
         # Draw selection rectangle
         if self.selection_start and self.selection_end:
@@ -1054,7 +1082,7 @@ class MonkeyIslandFontEditor(QMainWindow):
             btn.setStyleSheet("""
                 QPushButton {
                     font-size: 10px;
-                    font-family: Fira Code;
+                    font-family: Menlo, Monaco, 'Courier New', monospace;
                 }
             """)
             btn.clicked.connect(lambda checked, idx=i: self.jump_to_character(idx))
