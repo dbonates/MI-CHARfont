@@ -40,6 +40,7 @@ class PixelEditorCanvas(QWidget):
         self.char_height = 8  # Standard 8-pixel tall characters
         self.show_char_indices = True
         self.hover_y = -1
+        self.ruler_width = 120  # Width of left ruler in pixels
         
         # Selection and clipboard
         self.selecting = False
@@ -124,7 +125,7 @@ class PixelEditorCanvas(QWidget):
         """Update widget size based on image and zoom."""
         if self.image:
             new_size = QSize(
-                self.image.width() * self.zoom_level,
+                self.ruler_width + self.image.width() * self.zoom_level,
                 self.image.height() * self.zoom_level
             )
             self.setFixedSize(new_size)
@@ -136,14 +137,17 @@ class PixelEditorCanvas(QWidget):
             
         painter = QPainter(self)
         
-        # Draw pixels
+        # Draw left ruler background
+        painter.fillRect(0, 0, self.ruler_width, self.height(), QColor(40, 40, 40))
+        
+        # Draw pixels (offset by ruler width)
         for y in range(self.image.height()):
             for x in range(self.image.width()):
                 color_idx = self.image.pixelIndex(x, y)
                 color = QColor.fromRgb(self.image.color(color_idx))
                 
                 rect = QRect(
-                    x * self.zoom_level,
+                    self.ruler_width + x * self.zoom_level,
                     y * self.zoom_level,
                     self.zoom_level,
                     self.zoom_level
@@ -155,16 +159,16 @@ class PixelEditorCanvas(QWidget):
             painter.setPen(QPen(QColor(100, 100, 100, 100), 1))
             for x in range(self.image.width() + 1):
                 painter.drawLine(
-                    x * self.zoom_level, 0,
-                    x * self.zoom_level, self.image.height() * self.zoom_level
+                    self.ruler_width + x * self.zoom_level, 0,
+                    self.ruler_width + x * self.zoom_level, self.image.height() * self.zoom_level
                 )
             for y in range(self.image.height() + 1):
                 painter.drawLine(
-                    0, y * self.zoom_level,
-                    self.image.width() * self.zoom_level, y * self.zoom_level
+                    self.ruler_width, y * self.zoom_level,
+                    self.ruler_width + self.image.width() * self.zoom_level, y * self.zoom_level
                 )
         
-        # Draw character index overlays
+        # Draw character indices on left ruler
         if self.show_char_indices and self.char_height > 0:
             num_chars = self.image.height() // self.char_height
             for char_idx in range(num_chars):
@@ -175,34 +179,35 @@ class PixelEditorCanvas(QWidget):
                 is_hovered = (self.hover_y >= char_idx * self.char_height and 
                              self.hover_y < (char_idx + 1) * self.char_height)
                 
-                # Draw character boundary
+                # Draw character boundary line
                 if char_idx > 0:
                     painter.setPen(QPen(QColor(255, 0, 0, 150) if is_hovered else QColor(0, 255, 0, 80), 2))
-                    painter.drawLine(0, y_start, self.image.width() * self.zoom_level, y_start)
+                    painter.drawLine(0, y_start, self.ruler_width + self.image.width() * self.zoom_level, y_start)
                 
-                # Draw character index label
+                # Draw character index label on ruler
                 ascii_val = char_idx
-                char_repr = chr(ascii_val) if 32 <= ascii_val < 127 else '·'
-                label_text = f"#{char_idx} (ASCII {ascii_val}: '{char_repr}')"
+                char_repr = chr(ascii_val) if 32 <= ascii_val < 127 else ''
+                label_text = f"ASCII: {char_idx}\n{char_repr}"
                 
                 # Background for text
                 painter.setPen(Qt.PenStyle.NoPen)
                 if is_hovered:
                     painter.setBrush(QColor(255, 255, 0, 200))
                 else:
-                    painter.setBrush(QColor(0, 0, 0, 180))
-                text_rect = QRect(5, y_start + 2, 300, 16)
+                    painter.setBrush(QColor(60, 60, 60, 200))
+                text_rect = QRect(2, y_start + 2, self.ruler_width - 4, y_end - y_start - 4)
                 painter.drawRect(text_rect)
                 
                 # Text
                 painter.setPen(QColor(255, 255, 255) if not is_hovered else QColor(0, 0, 0))
-                painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label_text)
+                painter.setFont(painter.font())
+                painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, label_text)
         
         # Draw selection rectangle
         if self.selection_start and self.selection_end:
-            x1 = min(self.selection_start[0], self.selection_end[0]) * self.zoom_level
+            x1 = self.ruler_width + min(self.selection_start[0], self.selection_end[0]) * self.zoom_level
             y1 = min(self.selection_start[1], self.selection_end[1]) * self.zoom_level
-            x2 = max(self.selection_start[0], self.selection_end[0]) * self.zoom_level + self.zoom_level
+            x2 = self.ruler_width + max(self.selection_start[0], self.selection_end[0]) * self.zoom_level + self.zoom_level
             y2 = max(self.selection_start[1], self.selection_end[1]) * self.zoom_level + self.zoom_level
             
             painter.setPen(QPen(QColor(255, 255, 0), 2, Qt.PenStyle.DashLine))
@@ -222,7 +227,7 @@ class PixelEditorCanvas(QWidget):
                         color = QColor.fromRgb(self.image.color(color_idx))
                         
                         rect = QRect(
-                            (px + dx) * self.zoom_level,
+                            self.ruler_width + (px + dx) * self.zoom_level,
                             (py + dy) * self.zoom_level,
                             self.zoom_level,
                             self.zoom_level
@@ -233,7 +238,7 @@ class PixelEditorCanvas(QWidget):
             # Draw border around paste preview
             painter.setPen(QPen(QColor(0, 255, 0), 2, Qt.PenStyle.SolidLine))
             painter.drawRect(
-                px * self.zoom_level,
+                self.ruler_width + px * self.zoom_level,
                 py * self.zoom_level,
                 cw * self.zoom_level,
                 ch * self.zoom_level
@@ -245,17 +250,21 @@ class PixelEditorCanvas(QWidget):
             return
         
         if event.button() == Qt.MouseButton.LeftButton:
+            # Adjust for ruler offset
+            x = (event.pos().x() - self.ruler_width) // self.zoom_level
+            y = event.pos().y() // self.zoom_level
+            
+            # Ignore clicks in ruler area
+            if event.pos().x() < self.ruler_width:
+                return
+            
             if self.paste_mode:
                 # Start dragging paste preview or commit paste
-                x = event.pos().x() // self.zoom_level
-                y = event.pos().y() // self.zoom_level
                 self.paste_position = (x, y)
                 self.paste_dragging = True
                 self.update()
             elif self.edit_mode == 'select' or event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
                 # Start selection (in select mode or with Shift key)
-                x = event.pos().x() // self.zoom_level
-                y = event.pos().y() // self.zoom_level
                 self.selecting = True
                 self.selection_start = (x, y)
                 self.selection_end = (x, y)
@@ -276,7 +285,8 @@ class PixelEditorCanvas(QWidget):
             if old_hover != self.hover_y:
                 self.update()
             
-            x = event.pos().x() // self.zoom_level
+            # Adjust for ruler offset
+            x = (event.pos().x() - self.ruler_width) // self.zoom_level
             y = event.pos().y() // self.zoom_level
             
             # Update selection
@@ -306,8 +316,9 @@ class PixelEditorCanvas(QWidget):
         """Draw a pixel at the given position."""
         if not self.image:
             return
-            
-        x = pos.x() // self.zoom_level
+        
+        # Adjust for ruler offset
+        x = (pos.x() - self.ruler_width) // self.zoom_level
         y = pos.y() // self.zoom_level
         
         if 0 <= x < self.image.width() and 0 <= y < self.image.height():
