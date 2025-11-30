@@ -1,8 +1,32 @@
 # Monkey Island Bitmap Font Editor
 
+![Monkey Island Font Editor](screenshot.png)
+
 A specialized pixel editor for editing The Secret of Monkey Island bitmap font files. Built with PyQt6 to preserve the original color palette without modification.
 
-![Monkey Island Font Editor](screenshot.png)
+I did it one afternoon in my spare time to make ease my life on translating The Secrect of Monkey Island to brasilian portuguese. The original game does not have some special lating characters so I used these tools to get the editable bitmap:
+
+[scummrp and scummfont](https://github.com/dwatteau/scummtr)
+
+## The flow
+
+** Be sure to run these tools on same directory of `MONKEY.OOO` AND `MONKEY.001` files.
+
+1. unpack the game files
+
+```bash
+scummrp -g monkeycd  -p . -d dump_MI -o
+```
+
+2. extract the font bitmaps
+
+```bash
+scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0001 char0001.bmp 
+scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0002 char0002.bmp 
+scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0003 char0003.bmp 
+scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0004 char0004.bmp 
+scummfont o ./dump_MI/DISK_0001/LECF/LFLF_0010/CHAR_0006 char0006.bmp
+```
 
 ## Features
 
