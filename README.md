@@ -2,7 +2,15 @@
 
 ![Monkey Island Font Editor](screenshot.png)
 
+![Python](https://img.shields.io/badge/python-3.6+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)
+
 A specialized pixel editor for editing The Secret of Monkey Island bitmap font files. Built with PyQt6 to preserve the original color palette without modification.
+
+😉 Update 01/Dez/2025: 
+
+Just build a new tool to extract font bitmaps from game files. Check it here: [Monkey-Island-Font-Tool](https://github.com/dbonates/Monkey-Island-Font-Tool)
 
 I coded it in one afternoon in my spare time to make my life easier on the mission of translating The Secrect of Monkey Island (Talkie version) to brasilian portuguese. The original game does not have some special lating characters on charmap so just extract original, translate and repack strings isn't enough.
 
