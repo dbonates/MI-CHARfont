@@ -643,6 +643,8 @@ class MonkeyIslandFontEditor(QMainWindow):
         self.workspace_dir = None
         self.color_buttons = []
         self.color_button_group = None
+        self.bitmap_selector_frame = None
+        self.bitmap_buttons_container = None
         
         self.setWindowTitle("Monkey Island Bitmap Font Editor")
         self.setGeometry(100, 100, 1200, 800)
@@ -826,8 +828,8 @@ class MonkeyIslandFontEditor(QMainWindow):
         right_panel.setMaximumWidth(280)
         
         # Bitmap file selector buttons
-        bitmap_selector_frame = QFrame()
-        bitmap_selector_frame.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Raised)
+        self.bitmap_selector_frame = QFrame()
+        self.bitmap_selector_frame.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Raised)
         bitmap_selector_layout = QVBoxLayout()
         bitmap_selector_layout.setContentsMargins(5, 5, 5, 5)
         bitmap_selector_layout.setSpacing(3)
@@ -836,60 +838,15 @@ class MonkeyIslandFontEditor(QMainWindow):
         bitmap_label.setStyleSheet("font-weight: bold; font-size: 11px;")
         bitmap_selector_layout.addWidget(bitmap_label)
         
-        # Row 1
-        bitmap_row1 = QHBoxLayout()
-        bitmap_row1.setSpacing(2)
-        
-        btn_0001 = QPushButton("Sentence Line and Dialog")
-        btn_0001.clicked.connect(lambda: self.load_bitmap_file("char0001.bmp", 1))
-        btn_0001.setStyleSheet("font-size: 8px; padding: 3px; font-weight: bold;")
-        bitmap_row1.addWidget(btn_0001)
-        
-        # Row 2
-        bitmap_row2 = QHBoxLayout()
-        bitmap_row2.setSpacing(2)
-        
-        btn_0002 = QPushButton("On Screen Text")
-        btn_0002.clicked.connect(lambda: self.load_bitmap_file("char0002.bmp", 2))
-        btn_0002.setStyleSheet("font-size: 8px; padding: 3px; font-weight: bold;")
-        bitmap_row2.addWidget(btn_0002)
-        
-        # Row 3
-        bitmap_row3 = QHBoxLayout()
-        bitmap_row3.setSpacing(2)
+        # Container for bitmap buttons (will be populated later)
+        self.bitmap_buttons_container = QWidget()
+        self.bitmap_buttons_layout = QVBoxLayout()
+        self.bitmap_buttons_layout.setSpacing(3)
+        self.bitmap_buttons_container.setLayout(self.bitmap_buttons_layout)
+        bitmap_selector_layout.addWidget(self.bitmap_buttons_container)
 
-        btn_0003 = QPushButton("Upside Down Text")
-        btn_0003.clicked.connect(lambda: self.load_bitmap_file("char0003.bmp", 3))
-        btn_0003.setStyleSheet("font-size: 8px; padding: 3px; font-weight: bold;")
-        bitmap_row3.addWidget(btn_0003)
-        
-        # Row 4
-        bitmap_row4 = QHBoxLayout()
-        bitmap_row4.setSpacing(2)
-
-        btn_0004 = QPushButton("Title Screen/Credits Text")
-        btn_0004.clicked.connect(lambda: self.load_bitmap_file("char0004.bmp", 4))
-        btn_0004.setStyleSheet("font-size: 8px; padding: 3px; font-weight: bold;")
-        bitmap_row4.addWidget(btn_0004)
-
-
-        # Row 5
-        bitmap_row5 = QHBoxLayout()
-        bitmap_row5.setSpacing(2)
-
-        btn_0006 = QPushButton("VERB UI")
-        btn_0006.clicked.connect(lambda: self.load_bitmap_file("char0006.bmp", 6))
-        btn_0006.setStyleSheet("font-size: 8px; padding: 3px; font-weight: bold;")
-        bitmap_row5.addWidget(btn_0006)
-
-        bitmap_selector_layout.addLayout(bitmap_row1)
-        bitmap_selector_layout.addLayout(bitmap_row2)
-        bitmap_selector_layout.addLayout(bitmap_row3)
-        bitmap_selector_layout.addLayout(bitmap_row4)
-        bitmap_selector_layout.addLayout(bitmap_row5)
-
-        bitmap_selector_frame.setLayout(bitmap_selector_layout)
-        right_layout.addWidget(bitmap_selector_frame)
+        self.bitmap_selector_frame.setLayout(bitmap_selector_layout)
+        right_layout.addWidget(self.bitmap_selector_frame)
         
         # Color picker
         color_picker_frame = QFrame()
@@ -945,13 +902,99 @@ class MonkeyIslandFontEditor(QMainWindow):
         
     def load_workspace(self):
         """Load all character bitmaps from workspace directory."""
-        # Get workspace directory
-        self.workspace_dir = Path(__file__).parent
+        # Get workspace directory (default to script location)
+        if self.workspace_dir is None:
+            self.workspace_dir = Path(__file__).parent
+        
+        # Update bitmap selector UI based on available files
+        self.update_bitmap_selector()
         
         # Auto-load first bitmap if available
         first_bitmap = self.workspace_dir / "char0001.bmp"
         if first_bitmap.exists():
             self.load_bitmap_file("char0001.bmp", 1)
+    
+    def update_bitmap_selector(self):
+        """Update the bitmap selector based on available bitmap files."""
+        # Clear existing buttons
+        for i in reversed(range(self.bitmap_buttons_layout.count())):
+            widget = self.bitmap_buttons_layout.itemAt(i).widget()
+            if widget:
+                widget.setParent(None)
+                widget.deleteLater()
+        
+        # Check for bitmap files
+        bitmap_files = [
+            ("char0001.bmp", "Sentence Line and Dialog", 1),
+            ("char0002.bmp", "On Screen Text", 2),
+            ("char0003.bmp", "Upside Down Text", 3),
+            ("char0004.bmp", "Title Screen/Credits Text", 4),
+            ("char0006.bmp", "VERB UI", 6),
+        ]
+        
+        found_bitmaps = []
+        for filename, label, index in bitmap_files:
+            filepath = self.workspace_dir / filename
+            if filepath.exists():
+                found_bitmaps.append((filename, label, index))
+        
+        if found_bitmaps:
+            # Create buttons for found bitmaps
+            for filename, label, index in found_bitmaps:
+                btn = QPushButton(label)
+                btn.clicked.connect(lambda checked, f=filename, i=index: self.load_bitmap_file(f, i))
+                btn.setStyleSheet("font-size: 8px; padding: 3px; font-weight: bold;")
+                self.bitmap_buttons_layout.addWidget(btn)
+        else:
+            # No bitmaps found - show folder selection button
+            select_folder_btn = QPushButton("📁 Select Bitmap Folder")
+            select_folder_btn.setStyleSheet("""
+                QPushButton {
+                    font-size: 11px;
+                    padding: 10px;
+                    font-weight: bold;
+                    background-color: #4CAF50;
+                    color: white;
+                    border-radius: 5px;
+                }
+                QPushButton:hover {
+                    background-color: #45a049;
+                }
+            """)
+            select_folder_btn.clicked.connect(self.select_bitmap_folder)
+            self.bitmap_buttons_layout.addWidget(select_folder_btn)
+    
+    def select_bitmap_folder(self):
+        """Open dialog to select bitmap folder."""
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Select Bitmap Folder",
+            str(self.workspace_dir) if self.workspace_dir else str(Path.home()),
+            QFileDialog.Option.ShowDirsOnly
+        )
+        
+        if folder:
+            self.workspace_dir = Path(folder)
+            self.update_bitmap_selector()
+            
+            # Try to auto-load first available bitmap
+            first_bitmap = self.workspace_dir / "char0001.bmp"
+            if first_bitmap.exists():
+                self.load_bitmap_file("char0001.bmp", 1)
+            else:
+                # Check if any bitmaps were found
+                bitmap_files = [
+                    ("char0001.bmp", 1),
+                    ("char0002.bmp", 2),
+                    ("char0003.bmp", 3),
+                    ("char0004.bmp", 4),
+                    ("char0006.bmp", 6),
+                ]
+                for filename, index in bitmap_files:
+                    filepath = self.workspace_dir / filename
+                    if filepath.exists():
+                        self.load_bitmap_file(filename, index)
+                        break
     
     def load_bitmap_file(self, filename, index):
         """Load a specific bitmap file by name."""
